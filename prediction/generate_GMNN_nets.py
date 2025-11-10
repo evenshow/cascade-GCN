@@ -1,3 +1,5 @@
+"""生成 GMNN 所需的网络与标签文件，并记录详细中文注释。"""
+
 import json
 import re
 import numpy as np
@@ -75,6 +77,7 @@ bigraph = Bigraph(efile=EFILE,
                   r_type='tertiary',
                   pt_path=bpt)
 print(1)
+# 构建异构图后提取节点编号映射，方便统一索引
 bi_nxgraph = bigraph.nxgraph
 node_dict = {}
 for k, v in bigraph.node_list.items():
@@ -99,13 +102,16 @@ for k, v in bigraph.node_list.items():
 
 
 fpath = '../Data/ruin_cascades_for_different_type_and_size/500kv/cases'
+# 遍历所有案例文件，生成训练样本与标签
 for filename in os.listdir(fpath):
     with open('{0}/{1}'.format(fpath, filename), 'r') as f:
         data = json.load(f)
     source_nodes = data['source']
     source_nodes = [node_dict[v] for v in source_nodes]
+    # 训练输入为触发节点列表
     train_str = '\n'.join([str(x) for x in source_nodes])
     label_str = ''
+    # label 文件要求对所有节点给出标签：1 表示触发节点，-1 表示未知
     for index, node in enumerate(range(len(node_dict))):
         if not node in source_nodes:
             label_str = label_str + '{0}\t{1}\n'.format(index, -1)

@@ -1,3 +1,5 @@
+"""封装异构图模型（SAGE、RGCN等），并补充中文注释帮助理解。"""
+
 import dgl.nn as dglnn
 import torch.nn as nn
 import torch
@@ -8,6 +10,7 @@ from model import *
 
 
 class SAGE(nn.Module):
+    """基于 DGL 的图SAGE 模型，用于同构图节点表示学习。"""
     def __init__(self, in_feats, hid_feats, out_feats):
         super().__init__()
         # 实例化SAGEConv，in_feats是输入特征的维度，out_feats是输出特征的维度，aggregator_type是聚合函数的类型
@@ -27,6 +30,7 @@ class SAGE(nn.Module):
 # Define a Heterograph Conv model
 
 class RGCN(nn.Module):
+    """异构图卷积网络，实现多关系图的特征传播。"""
     def __init__(self, in_feats, hid_feats, out_feats, rel_names):
         super().__init__()
         # 实例化HeteroGraphConv，in_feats是输入特征的维度，out_feats是输出特征的维度，aggregate是聚合函数的类型

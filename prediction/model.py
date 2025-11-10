@@ -5,6 +5,8 @@ import numpy as np
 import random
 import json
 import time
+"""定义图结构相关的模型与工具，包含多种图神经网络模块及图构建逻辑。"""
+
 import dgl
 import dgl.nn as dnn
 import dgl.function as dfn
@@ -28,6 +30,7 @@ device = "cuda:0"
 
 
 class SAGE(nn.Module):
+    """图SAGE 两层网络，用于在同构图上提取节点特征。"""
     def __init__(self, in_dim, hid_dim, out_dim):
         super().__init__()
         self.conv1 = dnn.SAGEConv(in_dim, hid_dim, 'mean')
@@ -43,6 +46,7 @@ class SAGE(nn.Module):
 
 
 class Innerproduct(nn.Module):
+    """图自编码器的解码器，实现节点内积打分。"""
     def forward(self, graph, feat):
         with graph.local_scope():
             graph.ndata['feat'] = feat
@@ -51,6 +55,7 @@ class Innerproduct(nn.Module):
 
 
 class GCN(nn.Module):
+    """基于图SAGE 的图自编码器结构，输出边打分。"""
     def __init__(self, in_dim, hid_dim, out_dim):
         super().__init__()
         self.sage = SAGE(in_dim, hid_dim, out_dim)
@@ -62,6 +67,7 @@ class GCN(nn.Module):
 
 
 def construct_negative_graph(graph, k):
+    """随机采样节点构造负边集合，用于对比学习。"""
     src, dst = graph.edges()
 
     neg_src = src.repeat_interleave(k).cpu()
@@ -70,11 +76,13 @@ def construct_negative_graph(graph, k):
 
 
 def compute_loss(pos_score, neg_score):
+    """计算最大化边分数差异的 hinge loss。"""
     n_edges = pos_score.shape[0]
     return (1 - pos_score.unsqueeze(1) + neg_score.view(n_edges, -1)).clamp(min=0).mean()
 
 
 class Graph():
+    """基础图结构封装，负责存储图对象及通用方法。"""
     def __init__(self):
         self.graph = None
         self.feat = None
@@ -94,6 +102,7 @@ class Graph():
     def build_feat(self, embed_dim, hid_dim, feat_dim,
                    k, epochs,
                    pt_path):
+        """通过训练图自编码器生成节点特征并保存。"""
 
         print('training features ...')
         # self.graph = self.graph.to(device)
@@ -130,6 +139,7 @@ class Graph():
 
 
 class ElecGraph(Graph):
+    """电网子图封装，负责构建电力网络及其特征。"""
     def __init__(self, file, embed_dim, hid_dim, feat_dim, khop, epochs, pt_path):
         print(Fore.RED, Back.YELLOW)
         print('Electricity network construction!')
@@ -150,6 +160,7 @@ class ElecGraph(Graph):
                                         pt_path)
 
     def build_graph(self, file):
+        """读取文件构建电力网络图，并返回节点映射。"""
 
         print('building elec graph ...')
         try:
@@ -170,6 +181,7 @@ class ElecGraph(Graph):
         return node_list, elec_graph, dgl.from_networkx(elec_graph)
 
     def build_CI(self):
+        """计算节点集成介数（Collective Influence）用于重要性分析。"""
         CI = []
         d = self.degree
         for node in d:
@@ -183,6 +195,7 @@ class ElecGraph(Graph):
 
 
 class TraGraph(Graph):
+    """交通子图封装，处理道路与路口信息。"""
     def __init__(self, file1, file2, file3,
                  embed_dim, hid_dim, feat_dim, r_type,
                  khop, epochs, pt_path):
@@ -202,6 +215,7 @@ class TraGraph(Graph):
                                         pt_path)
 
     def build_graph(self, file1, file2, file3, r_type):
+        """根据道路类型过滤并构建交通网络。"""
 
         print('building traffic graph ...')
         graph = nx.Graph()
@@ -220,6 +234,7 @@ class TraGraph(Graph):
         return node_list, graph, dgl.from_networkx(graph)
 
     def build_CI(self):
+        """计算交通网络中节点的集成介数。"""
         CI = []
         d = self.degree
         for node in d:
@@ -233,6 +248,7 @@ class TraGraph(Graph):
 
 
 class BSGraph(Graph):
+    """基站子图封装，负责生成通信网络结构。"""
     def __init__(self, file, embed_dim, hid_dim, feat_dim,
                  khop, epochs, pt_path):
         print(Fore.RED, Back.YELLOW)
@@ -251,6 +267,7 @@ class BSGraph(Graph):
                                         pt_path)
 
     def build_graph(self, file):
+        """读取基站关系文件构建图结构。"""
 
         print('building basestation graph ...')
         graph = nx.Graph()
@@ -265,6 +282,7 @@ class BSGraph(Graph):
         return node_list, graph, dgl.from_networkx(graph)
 
     def build_CI(self):
+        """计算基站网络的集成介数指标。"""
         CI = []
         d = self.degree
         for node in d:
@@ -278,6 +296,7 @@ class BSGraph(Graph):
 
 
 class AOIGraph(Graph):
+    """兴趣区域（AOI）子图封装，仅包含节点集合。"""
     def __init__(self, file, embed_dim, hid_dim, feat_dim,
                  khop, epochs, pt_path):
         print(Fore.RED, Back.YELLOW)
@@ -294,6 +313,7 @@ class AOIGraph(Graph):
         #                                 pt_path)
 
     def build_graph(self, file):
+        """从文件中读取 AOI 节点并构建图。"""
         print('building basestation graph ...')
         graph = nx.Graph()
         with open(file, 'r') as f:
@@ -306,6 +326,7 @@ class AOIGraph(Graph):
 
 
 class RGCN(nn.Module):
+    """异构图卷积网络，将多关系聚合为节点特征。"""
     def __init__(self, in_dim, hid_dim, out_dim, rel_names):
         super().__init__()
         self.conv1 = dnn.HeteroGraphConv({
@@ -318,6 +339,7 @@ class RGCN(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, graph, input):
+        """执行两层卷积并返回各类型节点的表示。"""
         output = self.conv1(graph, input)
         output = {k: self.relu(v) for k, v in output.items()}
         output = self.conv2(graph, output)
@@ -325,6 +347,7 @@ class RGCN(nn.Module):
 
 
 class GAERGCN(nn.Module):
+    """结合图自编码器思想的异构图卷积网络。"""
     def __init__(self, in_dim, hid_dim, rel_names):
         super().__init__()
         self.conv1 = dnn.HeteroGraphConv({
@@ -337,6 +360,7 @@ class GAERGCN(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, graph, input):
+        """两层图卷积后返回更新的节点特征。"""
         output = self.conv1(graph, input)
         output = {k: self.relu(v) for k, v in output.items()}
         output = self.conv2(graph, output)
@@ -344,6 +368,7 @@ class GAERGCN(nn.Module):
 
 
 class HeteroInnerProduct(nn.Module):
+    """针对异构图的内积解码器，按关系类型计算边分数。"""
     def forward(self, graph, feat, etype):
         with graph.local_scope():
             graph.ndata['feat'] = feat
@@ -352,6 +377,7 @@ class HeteroInnerProduct(nn.Module):
 
 
 class HeteroGCN(nn.Module):
+    """异构图上的图自编码器，输出指定关系的正负样本得分。"""
     def __init__(self, in_dim, hid_dim, out_dim, rel_names):
         super().__init__()
         self.layer = RGCN(in_dim, hid_dim, out_dim, rel_names)
@@ -363,6 +389,7 @@ class HeteroGCN(nn.Module):
 
 
 def numbers_to_etypes(num):
+    """将数字编码映射为异构图的边类型。"""
     switcher = {
         0: ('power', 'elec', 'power'),
         1: ('power', 'eleced-by', 'power'),
@@ -384,6 +411,7 @@ def numbers_to_etypes(num):
 
 
 def construct_negative_graph_with_type(graph, k, etype):
+    """为指定关系类型构造负采样图。"""
     utype, _, vtype = etype
     src, dst = graph.edges(etype=etype)
     neg_src = src.repeat_interleave(k)
@@ -394,6 +422,7 @@ def construct_negative_graph_with_type(graph, k, etype):
 
 
 def build_hetero(nxgraph, embed_dim, hid_dim, feat_dim, subgraph, pt_path):
+    """根据四种子图拼接生成整体异构图对象。"""
     bsgraph, egraph, tgraph, aoigraph = subgraph
 
     power_embedding = torch.load(pt_path[0])
@@ -475,6 +504,7 @@ def build_hetero(nxgraph, embed_dim, hid_dim, feat_dim, subgraph, pt_path):
 
 
 class Bigraph(Graph):
+    """大尺度跨域异构图构建类，整合电网、交通、通信与 AOI。"""
     def __init__(self, efile, tfile1, tfile2, tfile3, file, bsfile, ele2bsfile, aoifile,
                  embed_dim, hid_dim, feat_dim,
                  r_type, subgraph,
@@ -517,6 +547,7 @@ class Bigraph(Graph):
                                         pt_path)
 
     def build_graph(self, efile, tfile1, tfile2, tfile3, bsfile, ele2bsfile, aoifile, r_type):
+        """综合多数据源构建耦合网络。"""
 
         print('building bigraph ...')
 
@@ -687,6 +718,7 @@ geod = Geod(ellps="WGS84")
 
 
 class Net(nn.Module):
+    """两层全连接网络，用于节点级分类或预测。"""
     def __init__(self, in_dim, hid_dim, out_dim):
         super().__init__()
         self.hidden = nn.Linear(in_dim, hid_dim)
@@ -702,6 +734,7 @@ class Net(nn.Module):
 
 
 class GAEEncoder(nn.Module):
+    """图自编码器的编码器部分，使用 SAGE 聚合。"""
     def __init__(self, in_dim, hidden_dim):
         super(GAEEncoder, self).__init__()
 
@@ -714,6 +747,7 @@ class GAEEncoder(nn.Module):
 
 
 class GAEDecoder(nn.Module):
+    """图自编码器的解码器部分，复用 SAGE 结构。"""
     def __init__(self, in_dim, hidden_dim):
         super(GAEDecoder, self).__init__()
 
@@ -726,6 +760,7 @@ class GAEDecoder(nn.Module):
 
 
 class InnerProductDecoder(nn.Module):
+    """经典的内积解码器，将节点嵌入转换为邻接矩阵。"""
     def forward(self, g, z):
         adj_rec = torch.mm(z, z.t())
         return adj_rec
@@ -733,6 +768,7 @@ class InnerProductDecoder(nn.Module):
 
 
 def txt_to_tensor(fpath):
+    """将包含两个浮点数的文本转换为张量。"""
     with open(fpath, 'r') as f:
         data = f.readline()
         data = torch.tensor([float(data.split('\t')[0]), float(data.split('\t')[1])], dtype=torch.float32)
@@ -741,6 +777,7 @@ def txt_to_tensor(fpath):
 
 
 class GAE_GMNN_RGCN_DP_delta(nn.Module):
+    """融合多种图模型的复杂网络，预测不同类型节点的状态。"""
     def __init__(self, in_dim, hidden_dim, out_dim, etypes):
         super(GAE_GMNN_RGCN_DP_delta, self).__init__()
         self.CoupledEncoder = GAERGCN(in_dim + 16 + 2, hidden_dim, etypes)
@@ -763,6 +800,7 @@ class GAE_GMNN_RGCN_DP_delta(nn.Module):
         self.th_aoi = nn.Linear(2, 1)
 
     def get_embedding(self, fpath):
+        """读取 DiffPool 生成的嵌入向量并返回张量。"""
         with open(fpath, 'r') as f:
             data = f.readlines()
         embedding = []
@@ -774,6 +812,7 @@ class GAE_GMNN_RGCN_DP_delta(nn.Module):
         return embedding
 
     def forward(self, graphs: list, inputs: list, case_num):
+        """整合多种嵌入并完成前向推理，输出各节点类别。"""
         n_elec = graphs[1].num_nodes()
         n_junc = graphs[2].num_nodes()
         n_bs = graphs[3].num_nodes()

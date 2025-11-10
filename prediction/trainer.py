@@ -1,5 +1,7 @@
 import math
 import numpy as np
+"""GMNN 训练过程的封装工具，包含优化器与训练循环，加入中文注释。"""
+
 import torch
 from torch import nn
 from torch.nn import init
@@ -9,6 +11,7 @@ from torch.optim import Optimizer
 
 
 def get_optimizer(name, parameters, lr, weight_decay=0):
+    """根据名称返回对应的优化器实例。"""
     if name == 'sgd':
         return torch.optim.SGD(parameters, lr=lr, weight_decay=weight_decay)
     elif name == 'rmsprop':
@@ -24,11 +27,13 @@ def get_optimizer(name, parameters, lr, weight_decay=0):
 
 
 def change_lr(optimizer, new_lr):
+    """动态调整学习率。"""
     for param_group in optimizer.param_groups:
         param_group['lr'] = new_lr
 
 
 class Trainer(object):
+    """封装 GMNN 的训练、评估与预测逻辑。"""
     def __init__(self, opt, model):
         self.opt = opt
         self.model = model
@@ -39,10 +44,12 @@ class Trainer(object):
         self.optimizer = get_optimizer(self.opt['optimizer'], self.parameters, self.opt['lr'], self.opt['decay'])
 
     def reset(self):
+        """重置模型参数与优化器。"""
         self.model.reset()
         self.optimizer = get_optimizer(self.opt['optimizer'], self.parameters, self.opt['lr'], self.opt['decay'])
 
     def update(self, inputs, target, idx):
+        """在指定节点集合上执行一次标准的交叉熵优化。"""
         if self.opt['cuda']:
             inputs = inputs.cuda()
             target = target.cuda()
@@ -59,6 +66,7 @@ class Trainer(object):
         return loss.item()
 
     def update_soft(self, inputs, target, idx):
+        """使用软标签进行优化，同时返回节点嵌入。"""
         if self.opt['cuda']:
             inputs = inputs.cuda()
             target = target.cuda()
@@ -76,6 +84,7 @@ class Trainer(object):
         return loss.item(), embedding
 
     def evaluate(self, inputs, target, idx):
+        """评估模型在指定节点集上的准确率。"""
         if self.opt['cuda']:
             inputs = inputs.cuda()
             target = target.cuda()
@@ -92,6 +101,7 @@ class Trainer(object):
         return loss.item(), preds, accuracy.item()
 
     def predict(self, inputs, tau=1):
+        """输出软标签分布，可选择温度参数 tau。"""
         if self.opt['cuda']:
             inputs = inputs.cuda()
 
@@ -105,6 +115,7 @@ class Trainer(object):
         return logits
 
     def save(self, filename):
+        """保存模型与优化器状态。"""
         params = {
             'model': self.model.state_dict(),
             'optim': self.optimizer.state_dict()
@@ -115,6 +126,7 @@ class Trainer(object):
             print("[Warning: Saving failed... continuing anyway.]")
 
     def load(self, filename):
+        """从磁盘加载模型参数。"""
         try:
             checkpoint = torch.load(filename)
         except BaseException:

@@ -1,3 +1,5 @@
+"""集成 GAE、RGCN、GMNN 与 DiffPool 的主训练脚本，补充中文注释。"""
+
 import dgl
 import numpy as np
 
@@ -117,6 +119,7 @@ best_checkpoint_path = "./{0}/best.pth".format(spath)
 last_checkpoint_path = "./{0}/last.pth".format(spath)
 
 if os.path.exists(last_checkpoint_path):
+    # 若存在断点文件则从中恢复训练状态
     checkpoint = torch.load(last_checkpoint_path)
     model.load_state_dict(checkpoint['model_state_dict'])
     opt.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -143,6 +146,7 @@ for epoch in range(start_epoch + 1, 10000):
     test_rec = []
     test_rmse = []
     for batch in train_dataloader:
+        # DataLoader 返回单个批次中的文件名列表，这里需再次随机打乱
         batch = random.sample(batch, len(batch))
         for batch_data in tqdm(batch, desc='training'):
             digits = re.findall('\d', batch_data)
@@ -153,6 +157,7 @@ for epoch in range(start_epoch + 1, 10000):
                 bigraph, egraph, tgraph, bsgraph, aoigraph,
                 fpath)
             node_features = {
+                # 为每类节点拼接原始特征与触发源标记
                 'junc': torch.cat([hetero_graph.nodes['junc'].data['feature'],
                                    torch.tensor(add_junc).unsqueeze(1).to(device)], dim=1),
                 'power': torch.cat([hetero_graph.nodes['power'].data['feature'],
@@ -164,7 +169,7 @@ for epoch in range(start_epoch + 1, 10000):
             }
             graph_list = [hetero_graph, dgl_egraph, dgl_tgraph, dgl_bsgraph]
             logits = model(graph_list, node_features, case_num)
-            # 计算损失值
+            # 计算损失值并保存输出，用于后续可视化
             save_output(end_power, end_junc, end_bs, end_aoi, logits, 'GAE_RGCN_GMNN_DP_delta', 'train')
             end_power = torch.tensor(end_power)
             end_junc = torch.tensor(end_junc)
@@ -197,6 +202,7 @@ for epoch in range(start_epoch + 1, 10000):
     }, last_checkpoint_path)
     model.eval()
     for batch in test_dataloader:
+        # 测试阶段同样需要逐案例评估
         batch = random.sample(batch, len(batch))
         for batch_data in tqdm(batch, desc='testing'):
             digits = re.findall('\d', batch_data)

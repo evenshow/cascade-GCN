@@ -1,3 +1,5 @@
+"""训练 GMNN 并提取节点嵌入向量，补充中文注释以便理解流程。"""
+
 import copy
 from tqdm import *
 import numpy as np
@@ -7,6 +9,7 @@ import torch
 
 
 def get_GMNN_embedding(case_num):
+    """根据案例编号训练 GMNN 模型并返回节点嵌入。"""
     from trainer import Trainer
     from gnn import GNNq, GNNp
     import loader
@@ -94,12 +97,14 @@ def get_GMNN_embedding(case_num):
     trainer_p = Trainer(opt, gnnp)
 
     def init_q_data():
+        """初始化 q 网络的输入与监督信息。"""
         inputs_q.copy_(inputs)
         temp = torch.zeros(idx_train.size(0), target_q.size(1)).type_as(target_q)
         temp.scatter_(1, torch.unsqueeze(target[idx_train], 1), 1.0)
         target_q[idx_train] = temp
 
     def update_p_data():
+        """使用 q 网络的输出更新 p 网络的训练数据。"""
         preds = trainer_q.predict(inputs_q, opt['tau'])
         if opt['draw'] == 'exp':
             inputs_p.copy_(preds)
@@ -119,6 +124,7 @@ def get_GMNN_embedding(case_num):
             target_p[idx_train] = temp
 
     def update_q_data():
+        """使用 p 网络的输出更新 q 网络的软标签。"""
         preds = trainer_p.predict(inputs_p)
         target_q.copy_(preds)
         if opt['use_gold'] == 1:
@@ -127,6 +133,7 @@ def get_GMNN_embedding(case_num):
             target_q[idx_train] = temp
 
     def pre_train(epoches):
+        """预训练 q 网络，使其在有监督信息下收敛。"""
         best = 0.0
         init_q_data()
         results = []
@@ -152,6 +159,7 @@ def get_GMNN_embedding(case_num):
         return results
 
     def train_p(epoches):
+        """固定 q 网络，更新 p 网络以拟合新的伪标签。"""
         update_p_data()
         results = []
         # for epoch in range(epoches):
@@ -165,6 +173,7 @@ def get_GMNN_embedding(case_num):
         return results
 
     def train_q(epoches):
+        """固定 p 网络，进一步训练 q 网络并返回嵌入。"""
         update_q_data()
         results = []
         for epoch in range(epoches):
@@ -175,6 +184,7 @@ def get_GMNN_embedding(case_num):
         return results, embedding
 
     base_results, q_results, p_results = [], [], []
+    # 先进行预训练，再交替优化 p 与 q 网络
     base_results += pre_train(opt['pre_epoch'])
     for k in trange(opt['iter']):
         p_results += train_p(opt['epoch'])

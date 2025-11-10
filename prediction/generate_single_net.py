@@ -1,3 +1,5 @@
+"""将综合网络拆分为单独子网文件，新增中文注释说明流程。"""
+
 import json
 from tqdm import *
 
@@ -10,6 +12,7 @@ junc = ''
 bs = ''
 aoi = ''
 with open('./GMNN_data/net.txt', 'r') as f:
+    # 遍历原始网络文件，根据节点编号范围划分子网络
     for line in tqdm(f.readlines()):
         [s, t, _] = line.split('\t')
         s = int(s)
@@ -23,8 +26,11 @@ with open('./GMNN_data/net.txt', 'r') as f:
         elif s in aoi_data and t in aoi_data:
             aoi += '{0}\t{1}\t1\n'.format(s, t)
 with open('./GMNN_data/elec_net.txt', 'w') as f:
+    # 将电力子图写入文件
     f.write(elec)
 with open('./GMNN_data/junc_net.txt', 'w') as f:
+    # 将交通节点子图写入文件
     f.write(junc)
 with open('./GMNN_data/bs_net.txt', 'w') as f:
+    # 将基站子图写入文件
     f.write(bs)

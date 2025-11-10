@@ -1,4 +1,6 @@
 import math
+"""GMNN 使用的图神经网络结构，添加中文注释。"""
+
 import numpy as np
 import torch
 from torch import nn
@@ -9,6 +11,7 @@ from layer import GraphConvolution
 
 
 class GNNq(nn.Module):
+    """GMNN 中的推理网络 q，用于估计标签分布。"""
     def __init__(self, opt, adj):
         super(GNNq, self).__init__()
         self.opt = opt
@@ -28,6 +31,7 @@ class GNNq(nn.Module):
         self.m2.reset_parameters()
 
     def forward(self, x):
+        """执行两层图卷积并返回 logits 及中间嵌入。"""
         x = F.dropout(x, self.opt['input_dropout'], training=self.training)
         x = self.m1(x)
         embedding = x.detach()
@@ -38,6 +42,7 @@ class GNNq(nn.Module):
 
 
 class GNNp(nn.Module):
+    """GMNN 中的生成网络 p，拟合标签生成过程。"""
     def __init__(self, opt, adj):
         super(GNNp, self).__init__()
         self.opt = opt
@@ -57,6 +62,7 @@ class GNNp(nn.Module):
         self.m2.reset_parameters()
 
     def forward(self, x):
+        """执行两层图卷积并返回 logits 及中间嵌入。"""
         x = F.dropout(x, self.opt['input_dropout'], training=self.training)
         x = self.m1(x)
         embedding = x.detach()

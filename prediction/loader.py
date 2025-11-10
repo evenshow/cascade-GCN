@@ -1,3 +1,5 @@
+"""GMNN 数据加载工具，负责解析节点、特征与图结构，添加中文注释。"""
+
 import sys
 import os
 import math
@@ -5,7 +7,9 @@ import numpy as np
 import torch
 from torch.autograd import Variable
 
+
 class Vocab(object):
+    """词表类，将文本中的符号映射为索引。"""
 
     def __init__(self, file_name, cols, with_padding=False):
         self.itos = []
@@ -36,6 +40,7 @@ class Vocab(object):
         return self.vocab_size
 
 class EntityLabel(object):
+    """实体标签类，负责存储节点对应的标签索引。"""
 
     def __init__(self, file_name, entity, label):
         self.vocab_n, self.col_n = entity
@@ -54,6 +59,7 @@ class EntityLabel(object):
         fi.close()
 
 class EntityFeature(object):
+    """实体特征类，将稀疏特征转换为稠密表示。"""
 
     def __init__(self, file_name, entity, feature):
         self.vocab_n, self.col_n = entity
@@ -77,6 +83,7 @@ class EntityFeature(object):
         fi.close()
 
     def to_one_hot(self, binary=False):
+        """将稀疏特征转化为 one-hot/概率向量。"""
         self.one_hot = [[0 for j in range(len(self.vocab_f))] for i in range(len(self.vocab_n))]
         for k in range(len(self.vocab_n)):
             sm = 0
@@ -90,6 +97,7 @@ class EntityFeature(object):
                 self.one_hot[k][fid] = wt / sm
 
 class Graph(object):
+    """解析边列表构建图结构的辅助类。"""
     def __init__(self, file_name, entity, weight=None):
         self.vocab_n, self.col_u, self.col_v = entity
         self.col_w = weight
@@ -126,6 +134,7 @@ class Graph(object):
         return len(self.edges)
 
     def to_symmetric(self, self_link_weight=1.0):
+        """将图转换为对称形式，并加入自环。"""
         vocab = set()
         for u, v, w in self.edges:
             vocab.add(u)
@@ -154,6 +163,7 @@ class Graph(object):
         self.edges = [(u, v, w/math.sqrt(d[u]*d[v])) for u, v, w in edges_]
 
     def get_sparse_adjacency(self, cuda=True):
+        """生成稀疏邻接矩阵张量，可选是否放入 GPU。"""
         shape = torch.Size([self.vocab_n.vocab_size, self.vocab_n.vocab_size])
 
         us, vs, ws = [], [], []

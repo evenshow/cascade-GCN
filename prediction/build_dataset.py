@@ -1,3 +1,5 @@
+"""数据加载与评估指标计算工具，统一添加中文注释方便理解。"""
+
 import json
 import random
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
@@ -14,6 +16,7 @@ random.seed(0)
 
 
 def build_dataset(fpath):
+    """构建训练与测试数据加载器，按 8:2 随机划分。"""
     file_names = os.listdir(fpath)
     random.shuffle(file_names)
     train_data_size = int(0.8 * len(file_names))
@@ -25,6 +28,7 @@ def build_dataset(fpath):
 
 
 def get_dataset(fpath, bigraph, egraph, tgraph, bsgraph, aoigraph, root_path):
+    """读取案例文件并根据节点类型生成输入特征与标签。"""
     fpath = root_path + '/' + fpath
     with open(fpath, 'r') as f:
         data = json.load(f)
@@ -40,6 +44,7 @@ def get_dataset(fpath, bigraph, egraph, tgraph, bsgraph, aoigraph, root_path):
     add_bs = []
     add_aoi = []
     for node in range(0, n_power):
+        # 供电源节点若位于攻击源集合，则置为1
         if node_list[node] in data['source']:
             add_power.append(1)
         else:
@@ -57,6 +62,7 @@ def get_dataset(fpath, bigraph, egraph, tgraph, bsgraph, aoigraph, root_path):
     end_aoi = []
 
     for node in range(0, n_power):
+        # 被破坏的电力节点标记为1
         if node_list[node] in data['ruin_nodes']:
             end_power.append(1)
         else:
@@ -84,6 +90,7 @@ def get_dataset(fpath, bigraph, egraph, tgraph, bsgraph, aoigraph, root_path):
 
 
 def get_dataset_mask(fpath, bigraph, egraph, tgraph, bsgraph):
+    """生成邻域掩码，仅关注指定半径内的节点。"""
     fpath = '../Data/ruin_cascades/4nodes/' + fpath
     with open(fpath, 'r') as f:
         data = json.load(f)
@@ -95,6 +102,7 @@ def get_dataset_mask(fpath, bigraph, egraph, tgraph, bsgraph):
 
     neighbors = []
     for node in data['source']:
+        # ego_graph 返回节点指定跳数内的子图，用于过滤邻居
         ego = nx.ego_graph(bigraph.nxgraph, node, radius=3)
         neighbors.extend(list(ego.nodes))
     neighbors = list(set(neighbors))
@@ -153,6 +161,7 @@ def get_dataset_mask(fpath, bigraph, egraph, tgraph, bsgraph):
 
 
 def calculate_metrics_homo(label, logits, epoch):
+    """针对同构图任务计算分类指标。"""
     y_pred = [1 if p[1] >= 0.9 else 0 for p in logits]
     auc = roc_auc_score(label, y_pred)
     f1 = f1_score(label, y_pred)
@@ -165,6 +174,7 @@ def calculate_metrics_homo(label, logits, epoch):
 
 
 def calculate_metrics(end_power, end_junc, end_bs, end_aoi, logits, epoch):
+    """聚合四类节点的预测结果并计算整体指标。"""
     y_true = list(end_power.detach().numpy()) + \
              list(end_junc.detach().numpy()) + \
              list(end_bs.detach().numpy()) + \
@@ -195,6 +205,7 @@ def calculate_metrics(end_power, end_junc, end_bs, end_aoi, logits, epoch):
 
 
 def cal_test_number(logits):
+    """统计预测为正类的节点数量，用于记录测试规模。"""
     y_pred = [1 if p[1] >= 0.5 else 0 for p in logits['power']] + \
              [1 if p[1] >= 0.5 else 0 for p in logits['junc']] + \
              [1 if p[1] >= 0.5 else 0 for p in logits['bs']] + \
@@ -205,6 +216,7 @@ def cal_test_number(logits):
 
 
 def extract_numbers(string):
+    """从字符串中提取数字，常用于解析案例编号。"""
     pattern = r'\d+'
     numbers = re.findall(pattern, string)
     result = ''.join(numbers)
@@ -212,6 +224,7 @@ def extract_numbers(string):
 
 
 def calculate_metrics_mask(end_power, end_junc, end_bs, logits, power_mask, junc_mask, bs_mask):
+    """基于掩码的指标计算，仅考虑指定区域。"""
     mask = power_mask + junc_mask + bs_mask
     y_true = \
         np.array(
@@ -234,6 +247,7 @@ def calculate_metrics_mask(end_power, end_junc, end_bs, logits, power_mask, junc
 
 
 def cal_weight(label):
+    """根据标签分布计算类别权重，以平衡损失函数。"""
     label = label.detach().cpu().numpy()
     weight = class_weight.compute_class_weight(class_weight='balanced', classes=np.unique(label), y=label)
     weight = torch.tensor(weight, dtype=torch.float32)
@@ -246,6 +260,7 @@ def cal_weight(label):
 
 
 def plot_metrics(y_true, y_pred, y_true_list, y_pred_list, metric, model):
+    """记录并保存指标曲线，便于可视化训练过程。"""
     y_true_list.append(y_true)
     y_pred_list.append(y_pred)
     plt.plot(y_true_list, label='True')
@@ -260,6 +275,7 @@ def plot_metrics(y_true, y_pred, y_true_list, y_pred_list, metric, model):
 
 
 def save_output(end_power, end_junc, end_bs, end_aoi, logits, model_name, stage):
+    """保存不同节点类型的预测结果和真实标签，方便分析。"""
     fpath = '../Data/plot_results_multinodes/{0}'.format(model_name)
     if not os.path.exists(fpath):
         os.mkdir(fpath)
@@ -288,6 +304,7 @@ def save_output(end_power, end_junc, end_bs, end_aoi, logits, model_name, stage)
 
 
 def save_output_homo(label, logits, model_name, stage):
+    """针对同构图任务保存预测结果与标签。"""
     fpath = '../Data/plot_results/{0}'.format(model_name)
     if not os.path.exists(fpath):
         os.mkdir(fpath)
