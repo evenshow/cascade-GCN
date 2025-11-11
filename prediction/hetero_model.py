@@ -1,4 +1,4 @@
-"""封装异构图模型（SAGE、RGCN等），并补充中文注释帮助理解。"""
+"""封装同/异构图模型（SAGE、RGCN等）"""
 
 import dgl.nn as dglnn
 import torch.nn as nn

@@ -1,5 +1,5 @@
-"""将综合网络拆分为单独子网文件，新增中文注释说明流程。"""
-
+"""将综合网络拆分为单独子网文件，去掉不同子系统之间的耦合边"""
+#用于单网络分析
 import json
 from tqdm import *
 
@@ -12,7 +12,8 @@ junc = ''
 bs = ''
 aoi = ''
 with open('./GMNN_data/net.txt', 'r') as f:
-    # 遍历原始网络文件，根据节点编号范围划分子网络
+    # 读取综合网络边列表文件 net.txt
+    # 这里每一行的形式是源节点s,目标节点t,权重weight
     for line in tqdm(f.readlines()):
         [s, t, _] = line.split('\t')
         s = int(s)
@@ -26,7 +27,9 @@ with open('./GMNN_data/net.txt', 'r') as f:
         elif s in aoi_data and t in aoi_data:
             aoi += '{0}\t{1}\t1\n'.format(s, t)
 with open('./GMNN_data/elec_net.txt', 'w') as f:
-    # 将电力子图写入文件
+    # 只将电力子图写入文件
+    #举例：(电力节点, 电力节点) → 归入电力子图 ✅
+    # (电力节点, 基站节点) → 跨网络边，不属于任何一个子图 → 被忽略
     f.write(elec)
 with open('./GMNN_data/junc_net.txt', 'w') as f:
     # 将交通节点子图写入文件

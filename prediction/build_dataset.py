@@ -1,4 +1,4 @@
-"""数据加载与评估指标计算工具，统一添加中文注释方便理解。"""
+"""数据加载与评估指标计算工具"""
 
 import json
 import random
@@ -38,11 +38,12 @@ def get_dataset(fpath, bigraph, egraph, tgraph, bsgraph, aoigraph, root_path):
     n_junc = tgraph.node_num
     n_bs = bsgraph.node_num
     n_aoi = aoigraph.node_num
-
+    #统计节点数目       
     add_power = []
     add_junc = []
     add_bs = []
     add_aoi = []
+    #生成输入特征（add_ 开头）
     for node in range(0, n_power):
         # 供电源节点若位于攻击源集合，则置为1
         if node_list[node] in data['source']:
@@ -55,12 +56,12 @@ def get_dataset(fpath, bigraph, egraph, tgraph, bsgraph, aoigraph, root_path):
         add_bs.append(0)
     for node in range(n_power + n_junc + n_bs, n_power + n_junc + n_bs + n_aoi):
         add_aoi.append(0)
-
+    #这个模型目前只把“电力源节点被攻击”作为输入信息，其他网络不带输入特征
     end_power = []
     end_junc = []
     end_bs = []
     end_aoi = []
-
+    #生成训练标签（end_ 开头）
     for node in range(0, n_power):
         # 被破坏的电力节点标记为1
         if node_list[node] in data['ruin_nodes']:
@@ -85,12 +86,12 @@ def get_dataset(fpath, bigraph, egraph, tgraph, bsgraph, aoigraph, root_path):
             end_aoi.append(1)
         else:
             end_aoi.append(0)
-
+    #如果节点出现在 ruin_nodes 中，就表示最终被破坏
     return add_power, add_junc, add_bs, add_aoi, end_power, end_junc, end_bs, end_aoi
 
 
 def get_dataset_mask(fpath, bigraph, egraph, tgraph, bsgraph):
-    """生成邻域掩码，仅关注指定半径内的节点。"""
+    """生成邻域mask，只关注攻击半径(radius=3)内的节点。"""
     fpath = '../Data/ruin_cascades/4nodes/' + fpath
     with open(fpath, 'r') as f:
         data = json.load(f)
@@ -106,7 +107,7 @@ def get_dataset_mask(fpath, bigraph, egraph, tgraph, bsgraph):
         ego = nx.ego_graph(bigraph.nxgraph, node, radius=3)
         neighbors.extend(list(ego.nodes))
     neighbors = list(set(neighbors))
-
+    #从攻击源出发，在多层网络里找所有“3 跳以内的节点” → 认为是 受影响范围
     add_power = []
     add_junc = []
     add_bs = []
@@ -119,23 +120,23 @@ def get_dataset_mask(fpath, bigraph, egraph, tgraph, bsgraph):
         add_junc.append(0)
     for node in range(n_power + n_junc, n_power + n_junc + n_bs):
         add_bs.append(0)
-
+    #生成输入特征
     end_power = []
     end_junc = []
     end_bs = []
     power_mask = []
     junc_mask = []
     bs_mask = []
-
+    #生成标签与掩码
     for node in range(0, n_power):
         if node_list[node] in data['ruin_nodes']:
             end_power.append(1)
         else:
             end_power.append(0)
-        if node_list[node] in neighbors:
+        if node_list[node] in neighbors: #位于3跳邻域内
             power_mask.append(True)
         else:
-            power_mask.append(False)
+            power_mask.append(False) #不在邻域内 → 在评估时会被忽略
 
     for node in range(n_power, n_power + n_junc):
         if node_list[node] in data['ruin_nodes']:
@@ -161,8 +162,10 @@ def get_dataset_mask(fpath, bigraph, egraph, tgraph, bsgraph):
 
 
 def calculate_metrics_homo(label, logits, epoch):
-    """针对同构图任务计算分类指标。"""
+    """针对同构图任务计算分类指标auc,f1,pre,rec,RMSE"""
+    #这段的AUC和RMSE计算方式可能有误，暂不改
     y_pred = [1 if p[1] >= 0.9 else 0 for p in logits]
+    #只要 p[1] >= 0.9 就预测为正类 1，否则为 0
     auc = roc_auc_score(label, y_pred)
     f1 = f1_score(label, y_pred)
     pre = precision_score(label, y_pred)
@@ -216,7 +219,7 @@ def cal_test_number(logits):
 
 
 def extract_numbers(string):
-    """从字符串中提取数字，常用于解析案例编号。"""
+    """从字符串中提取数字，常用于提取ID编号"""
     pattern = r'\d+'
     numbers = re.findall(pattern, string)
     result = ''.join(numbers)
@@ -306,6 +309,7 @@ def save_output(end_power, end_junc, end_bs, end_aoi, logits, model_name, stage)
 def save_output_homo(label, logits, model_name, stage):
     """针对同构图任务保存预测结果与标签。"""
     fpath = '../Data/plot_results/{0}'.format(model_name)
+    #生成一个以 模型名字 命名的目录
     if not os.path.exists(fpath):
         os.mkdir(fpath)
     fpath = '{0}/results'.format(fpath)

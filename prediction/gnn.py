@@ -1,5 +1,5 @@
 import math
-"""GMNN 使用的图神经网络结构，添加中文注释。"""
+"""GMNN 使用的图神经网络结构，包括推理网络 q 和生成网络 p。"""
 
 import numpy as np
 import torch
@@ -12,6 +12,7 @@ from layer import GraphConvolution
 
 class GNNq(nn.Module):
     """GMNN 中的推理网络 q，用于估计标签分布。"""
+    #GNNq的作用是Encoder,从节点的原始特征X和图结构A中推理出节点标签Y的概率分布
     def __init__(self, opt, adj):
         super(GNNq, self).__init__()
         self.opt = opt
@@ -43,6 +44,7 @@ class GNNq(nn.Module):
 
 class GNNp(nn.Module):
     """GMNN 中的生成网络 p，拟合标签生成过程。"""
+    #Decodr,从节点的标签分布出发，生成或重建这些标签（或者说学习标签之间的依赖关系）
     def __init__(self, opt, adj):
         super(GNNp, self).__init__()
         self.opt = opt

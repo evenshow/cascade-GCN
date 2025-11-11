@@ -1,4 +1,4 @@
-"""集成 GAE、RGCN、GMNN 与 DiffPool 的主训练脚本，补充中文注释。"""
+"""集成 GAE、RGCN、GMNN 与 DiffPool 的主训练脚本"""
 
 import dgl
 import numpy as np
