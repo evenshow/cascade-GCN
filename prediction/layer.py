@@ -30,7 +30,7 @@ class GraphConvolution(nn.Module):
         self.weight.data.uniform_(-stdv, stdv)
 
     def forward(self, x):
-        """图卷积的核心操作：先线性变换再进行邻接矩阵传播。"""
+        """先线性变换再进行邻接矩阵传播。"""
         # 线性变换，将输入特征映射到输出空间
         m = torch.mm(x, self.weight)
         # 稀疏矩阵乘法，完成邻居信息聚合

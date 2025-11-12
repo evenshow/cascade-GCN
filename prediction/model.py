@@ -73,7 +73,7 @@ def construct_negative_graph(graph, k):
     neg_src = src.repeat_interleave(k).cpu()
     neg_dst = torch.randint(0, graph.num_nodes(), (len(src) * k,)).cpu()
     return dgl.graph((neg_src, neg_dst), num_nodes=graph.num_nodes())
-
+    #注意：这里强制 .cpu()，若正图在 GPU，会产生device不一致风险
 
 def compute_loss(pos_score, neg_score):
     """计算最大化边分数差异的 hinge loss。"""
@@ -82,7 +82,7 @@ def compute_loss(pos_score, neg_score):
 
 
 class Graph():
-    """基础图结构封装，负责存储图对象及通用方法。"""
+    """基础图结构封装，训练嵌入为特征"""
     def __init__(self):
         self.graph = None
         self.feat = None
@@ -93,7 +93,7 @@ class Graph():
         return self.nxgraph.number_of_nodes()
 
     @property
-    def egde_num(self):
+    def egde_num(self):#这里egde_num可能有拼写错误（edge）。
         return self.nxgraph.number_of_edges()
 
     def build_graph(self):
@@ -136,8 +136,8 @@ class Graph():
         except:
             print("saving features failed")
         return feat
-
-
+    #保存“编码后的节点表示”作为后续特征
+    #下面是电/交/基/AOI 子图类
 class ElecGraph(Graph):
     """电网子图封装，负责构建电力网络及其特征。"""
     def __init__(self, file, embed_dim, hid_dim, feat_dim, khop, epochs, pt_path):
@@ -165,6 +165,8 @@ class ElecGraph(Graph):
         print('building elec graph ...')
         try:
             elec_graph = nx.read_gpickle(file)
+            #优先 nx.read_gpickle(file)
+            #否则假设 JSON：结构为 {facility_type: {node_id: {... 'relation': [邻居] ...}}}
         except:
             with open(file, 'r') as f:
                 data = json.load(f)
@@ -175,13 +177,13 @@ class ElecGraph(Graph):
                     for neighbor in node['relation']:
                         if int(node_id) < 6e8 and neighbor < 6e8:
                             elec_graph.add_edge(int(node_id), neighbor)
-
+                            #仅当 node_id 与 neighbor 都 < 6e8 时连边
         node_list: dict = {i: j for i, j in enumerate(list(elec_graph.nodes()))}
         print('electric graph builded.')
         return node_list, elec_graph, dgl.from_networkx(elec_graph)
 
     def build_CI(self):
-        """计算节点集成介数（Collective Influence）用于重要性分析。"""
+        """计算节点集成介数Collective Influence用于重要性分析。"""
         CI = []
         d = self.degree
         for node in d:
@@ -228,7 +230,8 @@ class TraGraph(Graph):
         for road, junc in data.items():
             if len(junc) == 2 and road_type[road] == r_type:
                 graph.add_edge(tl_id_road2elec_map[str(junc[0])], tl_id_road2elec_map[str(junc[1])])
-
+                #r_type 方便只保留某类道路构成的子图（例如只用“主干道”
+                #把交通层的ID转换为全局(电/路/通信)的ID
         node_list: dict = {i: j for i, j in enumerate(list(graph.nodes()))}
         print('traffic graph builded.')
         return node_list, graph, dgl.from_networkx(graph)
@@ -248,7 +251,7 @@ class TraGraph(Graph):
 
 
 class BSGraph(Graph):
-    """基站子图封装，负责生成通信网络结构。"""
+    """基站子图封装，负责生成通信网络结构"""
     def __init__(self, file, embed_dim, hid_dim, feat_dim,
                  khop, epochs, pt_path):
         print(Fore.RED, Back.YELLOW)
@@ -267,7 +270,7 @@ class BSGraph(Graph):
                                         pt_path)
 
     def build_graph(self, file):
-        """读取基站关系文件构建图结构。"""
+        """读取基站关系文件构建图结构"""
 
         print('building basestation graph ...')
         graph = nx.Graph()
@@ -296,7 +299,7 @@ class BSGraph(Graph):
 
 
 class AOIGraph(Graph):
-    """兴趣区域（AOI）子图封装，仅包含节点集合。"""
+    """兴趣区域AOI子图封装,仅包含节点集合。"""
     def __init__(self, file, embed_dim, hid_dim, feat_dim,
                  khop, epochs, pt_path):
         print(Fore.RED, Back.YELLOW)
@@ -429,7 +432,7 @@ def build_hetero(nxgraph, embed_dim, hid_dim, feat_dim, subgraph, pt_path):
     junc_embedding = torch.load(pt_path[1])
     bs_embedding = torch.load(pt_path[2])
     aoi_embedding = torch.load(pt_path[3])
-
+    #准备把四类节点的预训练embedding挂到异构图上
     n_power = egraph.node_num
     n_junc = tgraph.node_num
     n_bs = bsgraph.node_num
@@ -439,15 +442,15 @@ def build_hetero(nxgraph, embed_dim, hid_dim, feat_dim, subgraph, pt_path):
     junc_idx = {v: k - n_power for k, v in tgraph.node_list.items()}
     bs_idx = {v: k - n_power - n_junc for k, v in bsgraph.node_list.items()}
     aoi_idx = {v: k - n_power - n_junc - n_bs for k, v in aoigraph.node_list.items()}
-
+    #从全局节点ID到各子图节点索引的映射
     edge_list = nxgraph.edges()
-    elec_edge = [(u, v) for (u, v) in edge_list if u // 1e8 < 6 and v // 1e8 < 6]
+    elec_edge = [(u, v) for (u, v) in edge_list if u // 1e8 < 6 and v // 1e8 < 6]#u和v前缀均小于6表示电网节点
     tran_edge = [(u, v) for (u, v) in edge_list if u // 1e8 == 9 and v // 1e8 == 9]
     bs_edge = [(u, v) for (u, v) in edge_list if u // 1e8 == 7 and v // 1e8 == 7]
-
+    #按ID前缀从大图里分类边
     ele_bs_edge = [(u, v) for (u, v) in edge_list
                    if (u // 1e8 < 6 and v // 1e8 == 7) or (v // 1e8 < 6 and u // 1e8 == 7)]
-
+                    #u是电，v是基，或反过来
     ele_tran_edge = [(u, v) for (u, v) in edge_list
                      if (u // 1e8 < 6 and v // 1e8 == 9) or (v // 1e8 < 6 and u // 1e8 == 9)]
 
@@ -456,7 +459,7 @@ def build_hetero(nxgraph, embed_dim, hid_dim, feat_dim, subgraph, pt_path):
 
     bs_aoi_edge = [(u, v) for (u, v) in edge_list
                    if (u // 1e8 == 7 and v // 1e8 == 11)]
-
+    #按ID前缀从大图里分类跨层关系（电↔基、电↔交、电↔AOI、基↔AOI）
     elec_src, elec_dst = np.array([power_idx[u] for (u, _) in elec_edge]), np.array(
         [power_idx[v] for (_, v) in elec_edge])
     tran_src, tran_dst = np.array([junc_idx[u] for (u, _) in tran_edge]), np.array(
@@ -480,7 +483,7 @@ def build_hetero(nxgraph, embed_dim, hid_dim, feat_dim, subgraph, pt_path):
         ('junc', 'traned-by', 'junc'): (tran_dst, tran_src),
 
         ('bs', 'communicate', 'bs'): (bs_src, bs_dst),
-        ('bs', 'communicate-by', 'bs'): (bs_src, bs_dst),
+        ('bs', 'communicate-by', 'bs'): (bs_src, bs_dst),#注意这里通信是双向的
 
         ('junc', 'tran-supp-elec', 'power'): (ele_tran_src, ele_tran_dst),
         ('power', 'elec-suppd-by-tran', 'junc'): (ele_tran_dst, ele_tran_src),
@@ -509,6 +512,7 @@ class Bigraph(Graph):
                  embed_dim, hid_dim, feat_dim,
                  r_type, subgraph,
                  khop, epochs, pt_path):
+        #ele2bsfile.json是电↔基站关系文件,file.json是电↔路关系文件
         print(Fore.RED, Back.YELLOW)
         print('Bigraph network construction!')
         print(Style.RESET_ALL)
@@ -550,7 +554,7 @@ class Bigraph(Graph):
         """综合多数据源构建耦合网络。"""
 
         print('building bigraph ...')
-
+        #下面构建交通子图部分
         graph = nx.Graph()
         with open(tfile1, 'r') as f:
             data = json.load(f)
@@ -561,7 +565,7 @@ class Bigraph(Graph):
         for road, junc in data.items():
             if len(junc) == 2 and road_type[road] == r_type:
                 graph.add_edge(tl_id_road2elec_map[str(junc[0])], tl_id_road2elec_map[str(junc[1])], id=int(road))
-
+        #下面构建电网子图部分
         with open(efile, 'r') as f:
             data = json.load(f)
         for key, facility in data.items():
@@ -574,21 +578,23 @@ class Bigraph(Graph):
             if int(tl_id) in list(graph.nodes()):
                 for neighbor in value['relation']:
                     graph.add_edge(neighbor, int(tl_id))
-
+                #tl_id是交通路口对应的电网节点ID
+        #下面构建基站子图部分
         with open(bsfile, 'r') as f:
             data = json.load(f)
         for node_id in tqdm(data.keys()):
             node = data[node_id]
             for neighbor in node['relation']:
                 graph.add_edge(int(node_id), int(neighbor))
-
+        #下面构建跨层关系部分
+        #电↔路关系
         with open(ele2bsfile, 'r') as f:
             data = json.load(f)
         for ele, value in tqdm(data.items()):
             if int(ele) in list(graph.nodes()):
                 for neighbor in value:
                     graph.add_edge(int(neighbor), int(ele))
-
+        #电↔基站关系
         with open(aoifile, 'r') as f:
             data = json.load(f)
         for aoi, value in tqdm(data.items()):
@@ -599,7 +605,7 @@ class Bigraph(Graph):
 
         print('bigraph builded.')
         return graph
-
+    #下面是构建异构图特征的函数
     def build_feat(self, embed_dim, hid_dim, feat_dim, subgraph, k, epochs, pt_path):
         bsgraph, egraph, tgraph, aoigraph = subgraph
 
@@ -607,7 +613,7 @@ class Bigraph(Graph):
         n_junc = tgraph.node_num
         n_bs = bsgraph.node_num
         n_aoi = aoigraph.node_num
-
+        #下面准备从全局ID映射到各子图节点索引
         power_idx = {v: k for k, v in egraph.node_list.items()}
         junc_idx = {v: k - n_power for k, v in tgraph.node_list.items()}
         bs_idx = {v: k - n_power - n_junc for k, v in bsgraph.node_list.items()}
@@ -629,7 +635,7 @@ class Bigraph(Graph):
 
         bs_aoi_edge = [(u, v) for (u, v) in edge_list
                        if (u // 1e8 == 7 and v // 1e8 == 11)]
-
+        #下面准备按类型构建异构图
         elec_src, elec_dst = np.array([power_idx[u] for (u, _) in elec_edge]), np.array(
             [power_idx[v] for (_, v) in elec_edge])
         tran_src, tran_dst = np.array([junc_idx[u] for (u, _) in tran_edge]), np.array(
@@ -644,10 +650,10 @@ class Bigraph(Graph):
             [aoi_idx[v] for (_, v) in ele_aoi_edge])
         bs_aoi_src, bs_aoi_dst = np.array([bs_idx[u] for (u, _) in bs_aoi_edge]), np.array(
             [aoi_idx[v] for (_, v) in bs_aoi_edge])
-
+        #下面正式构建异构图对象，有14种关系类型，含反向名
         hetero_graph = dgl.heterograph({
             ('power', 'elec', 'power'): (elec_src, elec_dst),
-            ('power', 'eleced-by', 'power'): (elec_dst, elec_src),
+            ('power', 'eleced-by', 'power'): (elec_dst, elec_src),#这是反向边
 
             ('junc', 'tran', 'junc'): (tran_src, tran_dst),
             ('junc', 'traned-by', 'junc'): (tran_dst, tran_src),
@@ -667,21 +673,21 @@ class Bigraph(Graph):
             ('bs', 'bs-supp-aoi', 'aoi'): (bs_aoi_src, bs_aoi_dst),
             ('aoi', 'aoi-suppd-by-bs', 'bs'): (bs_aoi_dst, bs_aoi_src)
         })
-
+        #下面初始化节点特征为可训练的嵌入向量
         hetero_graph.nodes['power'].data['feature'] = torch.nn.Embedding(n_power, embed_dim, max_norm=1).weight
         hetero_graph.nodes['junc'].data['feature'] = torch.nn.Embedding(n_junc, embed_dim, max_norm=1).weight
         hetero_graph.nodes['bs'].data['feature'] = torch.nn.Embedding(n_bs, embed_dim, max_norm=1).weight
         hetero_graph.nodes['aoi'].data['feature'] = torch.nn.Embedding(n_aoi, embed_dim, max_norm=1).weight
-
+        #hgcn是异构图卷积自编码器模型
         hgcn = HeteroGCN(embed_dim, hid_dim, feat_dim, hetero_graph.etypes)
-
+        #准备训练异构图特征
         bifeatures = {
             'junc': hetero_graph.nodes['junc'].data['feature'],
             'power': hetero_graph.nodes['power'].data['feature'],
             'bs': hetero_graph.nodes['bs'].data['feature'],
             'aoi': hetero_graph.nodes['aoi'].data['feature']
         }
-
+        #优化器与训练过程
         optimizer = torch.optim.Adam(hgcn.parameters())
         print('training features ...')
         for epoch in range(epochs):
@@ -710,13 +716,12 @@ class Bigraph(Graph):
 
         return feat
 
-
+#全局常量与地理工具,好像暂未使用
 BASE = 100000000
 geod = Geod(ellps="WGS84")
 
 
-
-
+#下面是各种网络模块的定义
 class Net(nn.Module):
     """两层全连接网络，用于节点级分类或预测。"""
     def __init__(self, in_dim, hid_dim, out_dim):
@@ -798,7 +803,7 @@ class GAE_GMNN_RGCN_DP_delta(nn.Module):
         self.th_junc = nn.Linear(2, 1)
         self.th_bs = nn.Linear(2, 1)
         self.th_aoi = nn.Linear(2, 1)
-
+    # 读取 DiffPool 生成的嵌入向量
     def get_embedding(self, fpath):
         """读取 DiffPool 生成的嵌入向量并返回张量。"""
         with open(fpath, 'r') as f:

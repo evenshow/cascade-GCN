@@ -1,19 +1,19 @@
-"""训练 GMNN 并提取节点嵌入向量，补充中文注释以便理解流程。"""
+"""训练 GMNN 并提取节点嵌入向量"""
 
 import copy
-from tqdm import *
+from tqdm import *#tqdm是一个进度条库
 import numpy as np
 import random
 import argparse
 import torch
 
-
+# 获取 GMNN 嵌入的主函数
 def get_GMNN_embedding(case_num):
-    """根据案例编号训练 GMNN 模型并返回节点嵌入。"""
+    """根据案例编号训练 GMNN 模型并返回节点嵌入"""
     from trainer import Trainer
     from gnn import GNNq, GNNp
     import loader
-
+    #下面是参数设置
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', type=str, default='../../GMNN_data')
     parser.add_argument('--save', type=str, default='/')
@@ -36,7 +36,7 @@ def get_GMNN_embedding(case_num):
     parser.add_argument('--cuda', type=bool, default=torch.cuda.is_available())
     parser.add_argument('--cpu', action='store_true', help='Ignore CUDA.')
     args = parser.parse_args()
-
+    #下面是随机种子设置
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)
@@ -46,31 +46,31 @@ def get_GMNN_embedding(case_num):
         torch.cuda.manual_seed(args.seed)
 
     opt = vars(args)
-
+    # 数据文件路径
     net_file = opt['dataset'] + '/net.txt'
     label_file = opt['dataset'] + '/label/label_{0}.txt'.format(case_num)
     feature_file = opt['dataset'] + '/feature.txt'
     train_file = opt['dataset'] + '/train/train_{0}.txt'.format(case_num)
-
+    # 加载词表与数据集
     vocab_node = loader.Vocab(net_file, [0, 1])
     vocab_label = loader.Vocab(label_file, [1])
     vocab_feature = loader.Vocab(feature_file, [1])
-
+    #下面是数据集信息存入opt
     opt['num_node'] = len(vocab_node)
     opt['num_feature'] = len(vocab_feature)
     opt['num_class'] = len(vocab_label)
-
+    # 加载图结构、标签与特征
     graph = loader.Graph(file_name=net_file, entity=[vocab_node, 0, 1])
     label = loader.EntityLabel(file_name=label_file, entity=[vocab_node, 0], label=[vocab_label, 1])
     feature = loader.EntityFeature(file_name=feature_file, entity=[vocab_node, 0], feature=[vocab_feature, 1])
     graph.to_symmetric(opt['self_link_weight'])
     feature.to_one_hot(binary=True)
     adj = graph.get_sparse_adjacency(opt['cuda'])
-
+    # 读取训练节点索引
     with open(train_file, 'r') as fi:
         idx_train = [vocab_node.stoi[line.strip()] for line in fi]
     idx_all = list(range(opt['num_node']))
-
+    #下面是数据转换为张量
     inputs = torch.Tensor(feature.one_hot)
     target = torch.LongTensor(label.itol)
     idx_train = torch.LongTensor(idx_train)
@@ -79,7 +79,7 @@ def get_GMNN_embedding(case_num):
     target_q = torch.zeros(opt['num_node'], opt['num_class'])
     inputs_p = torch.zeros(opt['num_node'], opt['num_class'])
     target_p = torch.zeros(opt['num_node'], opt['num_class'])
-
+    #如果使用 GPU，则将数据转移到 GPU 上
     if opt['cuda']:
         inputs = inputs.cuda()
         target = target.cuda()
@@ -89,7 +89,7 @@ def get_GMNN_embedding(case_num):
         target_q = target_q.cuda()
         inputs_p = inputs_p.cuda()
         target_p = target_p.cuda()
-
+    # 构建 q 与 p 网络及其训练器
     gnnq = GNNq(opt, adj)
     trainer_q = Trainer(opt, gnnq)
 
@@ -97,14 +97,14 @@ def get_GMNN_embedding(case_num):
     trainer_p = Trainer(opt, gnnp)
 
     def init_q_data():
-        """初始化 q 网络的输入与监督信息。"""
+        """初始化 q 网络的输入与监督信息"""
         inputs_q.copy_(inputs)
         temp = torch.zeros(idx_train.size(0), target_q.size(1)).type_as(target_q)
         temp.scatter_(1, torch.unsqueeze(target[idx_train], 1), 1.0)
         target_q[idx_train] = temp
 
     def update_p_data():
-        """使用 q 网络的输出更新 p 网络的训练数据。"""
+        """使用 q 网络的输出更新 p 网络的训练数据"""
         preds = trainer_q.predict(inputs_q, opt['tau'])
         if opt['draw'] == 'exp':
             inputs_p.copy_(preds)
@@ -124,7 +124,7 @@ def get_GMNN_embedding(case_num):
             target_p[idx_train] = temp
 
     def update_q_data():
-        """使用 p 网络的输出更新 q 网络的软标签。"""
+        """使用 p 网络的输出更新 q 网络的软标签"""
         preds = trainer_p.predict(inputs_p)
         target_q.copy_(preds)
         if opt['use_gold'] == 1:
@@ -133,7 +133,7 @@ def get_GMNN_embedding(case_num):
             target_q[idx_train] = temp
 
     def pre_train(epoches):
-        """预训练 q 网络，使其在有监督信息下收敛。"""
+        """预训练 q 网络，使其在有监督信息下收敛"""
         best = 0.0
         init_q_data()
         results = []
@@ -149,7 +149,7 @@ def get_GMNN_embedding(case_num):
         # trainer_q.model.load_state_dict(state['model'])
         # trainer_q.optimizer.load_state_dict(state['optim'])
         # return results
-
+    #epochs是训练轮数
         for epoch in range(epoches):
             loss = trainer_q.update_soft(inputs_q, target_q, idx_train)
             state = dict([('model', copy.deepcopy(trainer_q.model.state_dict())),

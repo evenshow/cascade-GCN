@@ -1,6 +1,6 @@
 import math
 import numpy as np
-"""GMNN 训练过程的封装工具，包含优化器与训练循环，加入中文注释。"""
+"""GMNN 训练过程的封装工具，包含优化器与训练循环"""
 
 import torch
 from torch import nn
@@ -9,7 +9,8 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from torch.optim import Optimizer
 
-
+#trainer是一个类，封装了训练、评估和预测的逻辑
+#而train是一个函数，负责具体的训练过程和数据更新
 def get_optimizer(name, parameters, lr, weight_decay=0):
     """根据名称返回对应的优化器实例。"""
     if name == 'sgd':
@@ -64,7 +65,7 @@ class Trainer(object):
         loss.backward()
         self.optimizer.step()
         return loss.item()
-
+    #软标签是指标签不是单一类别，而是一个概率分布
     def update_soft(self, inputs, target, idx):
         """使用软标签进行优化，同时返回节点嵌入。"""
         if self.opt['cuda']:
@@ -99,7 +100,7 @@ class Trainer(object):
         accuracy = correct.sum() / idx.size(0)
 
         return loss.item(), preds, accuracy.item()
-
+    #温度参数tau用于控制预测分布的平滑度
     def predict(self, inputs, tau=1):
         """输出软标签分布，可选择温度参数 tau。"""
         if self.opt['cuda']:
@@ -124,7 +125,7 @@ class Trainer(object):
             torch.save(params, filename)
         except BaseException:
             print("[Warning: Saving failed... continuing anyway.]")
-
+    
     def load(self, filename):
         """从磁盘加载模型参数。"""
         try:
